@@ -10,38 +10,57 @@ const rl = readline.createInterface({
 
 function createRecords() {
   let docs = [];
+  let verses = [];
+
+  function sendData() {
+    const body = JSON.stringify({ docs });
+
+    fetch('http://localhost:5984/chapters/_bulk_docs', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body,
+    }).then((res) => {
+      return res.json();
+    }).then((x) => {
+      console.log(x.length);
+    });
+
+    docs = [];
+  }
+
+  function reduceBook() {
+    const lastVerse = verses[verses.length - 1];
+    const { book, chapter } = lastVerse;
+
+    docs.push({
+      _id: `${book.replace(' ', '_')}:${chapter}`,
+      book, chapter, verses,
+    });
+  }
 
   rl.on('line', (line) => {
-    var [book, chapter, verse, text] = line.split('||');
+    const [book, chapter, verse, text] = line.split('||');
+    const lastVerse = verses[verses.length - 1];
 
     if (book && chapter && verse && text) {
-      docs.push({
-        _id: `${book.replace(' ', '')}+${chapter}+${verse}`,
+      if (lastVerse && (lastVerse.chapter !== chapter || lastVerse.book !== book)) {
+        reduceBook();
+
+        verses = [];
+      }
+
+      verses.push({
         book, chapter, verse, text,
       });
-    }
-
-    if (docs.length === 400) {
-      const body = JSON.stringify({ docs });
-
-      fetch('http://localhost:5984/verses/_bulk_docs', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body,
-      }).then((res) => {
-        return res.json();
-      }).then((x) => {
-        console.log(x.length);
-      });
-
-      docs = [];
     }
   });
 
   rl.on('close', () => {
+    reduceBook();
+    sendData();
   });
 }
 
